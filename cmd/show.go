@@ -41,9 +41,18 @@ var showCmd = &cobra.Command{
 
 		// resizing the image to fit the terminal
 		maxWidth := uint(80)
-		resizedImg := resize.Resize(maxWidth, 0, img, resize.Lanczos3) // 0 for height means to maintain aspect ratio
+		resizedImg := resize.Resize(maxWidth, 0, img, resize.Lanczos3) // 0 for height means to maintain aspect ratio. Lanczos3 gives the best quality, especially when scaling down for terminal display.
 
-		fmt.Printf("➡️  Resized image size: %dx%d\n", resizedImg.Bounds().Dx(), resizedImg.Bounds().Dy())
+		for y := 0; y < resizedImg.Bounds().Dy(); y++ {
+			for x := 0; x < resizedImg.Bounds().Dx(); x++ {
+				r, g, b, _ := resizedImg.At(x, y).RGBA()
+				ansi := RGBToANSI256(r, g, b)
+
+				// Print block with background color
+				fmt.Printf("\x1b[48;5;%dm ", ansi)
+			}
+			fmt.Print("\x1b[0m\n") // Reset color, then newline
+		}
 
 	},
 }
