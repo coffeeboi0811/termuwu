@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/fatih/color"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	_ "golang.org/x/image/webp"
@@ -26,9 +27,11 @@ var (
 
 func loadImage(pathOrURL string) (image.Image, string, error) {
 	var reader io.ReadCloser
+	cyan := color.New(color.FgCyan).SprintFunc()
+	urlColor := color.New(color.FgBlue, color.Underline).SprintFunc()
 
 	if strings.HasPrefix(pathOrURL, "http://") || strings.HasPrefix(pathOrURL, "https://") {
-		fmt.Printf("📸 Downloading image from URL: %s\n", pathOrURL)
+		fmt.Printf("📸 %s %s\n", cyan("Downloading image from URL:"), urlColor(pathOrURL))
 		req, _ := http.NewRequest("GET", pathOrURL, nil)
 		resp, httpErr := http.DefaultClient.Do(req)
 		if httpErr != nil {
@@ -39,22 +42,28 @@ func loadImage(pathOrURL string) (image.Image, string, error) {
 			return nil, "", fmt.Errorf("couldn't download image: received status code %d", resp.StatusCode)
 		}
 
+		barGreen := color.New(color.FgGreen).SprintFunc()
+		barLightBlack := color.New(color.FgHiBlack).SprintFunc()
+
 		bar := progressbar.NewOptions64(
 			resp.ContentLength,
-			progressbar.OptionSetDescription("Downloading..."),
-			progressbar.OptionSetWidth(15),
+			progressbar.OptionSetDescription(cyan("Downloading...")),
+			progressbar.OptionSetWriter(os.Stderr),
+			progressbar.OptionSetWidth(25),
 			progressbar.OptionShowBytes(true),
+			progressbar.OptionEnableColorCodes(true),
+			progressbar.OptionSetItsString("bytes"),
 			progressbar.OptionSetTheme(progressbar.Theme{
-				Saucer:        "=",
-				SaucerHead:    ">",
-				SaucerPadding: " ",
-				BarStart:      "[",
-				BarEnd:        "]",
+				Saucer:        barGreen("█"),
+				SaucerHead:    barGreen("█"),
+				SaucerPadding: barLightBlack("░"),
+				BarStart:      "|",
+				BarEnd:        "|",
 			}),
 		)
 		reader = io.NopCloser(io.TeeReader(resp.Body, bar))
 	} else {
-		fmt.Printf("📸 Loading image from path: %s\n", pathOrURL)
+		fmt.Printf("📸 %s %s\n", cyan("Loading image from path:"), pathOrURL)
 		file, fileErr := os.Open(pathOrURL)
 		if fileErr != nil {
 			return nil, "", fmt.Errorf("couldn't open image: %w", fileErr)
@@ -97,21 +106,30 @@ var showCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		imagePathOrURL := args[0]
 
+		errorColor := color.New(color.FgRed, color.Bold).SprintFunc()
+		successColor := color.New(color.FgGreen).SprintFunc()
+		infoColor := color.New(color.FgYellow).SprintFunc()
+
 		if (renderWidth > 0 && renderHeight == 0) || (renderHeight > 0 && renderWidth == 0) {
-			fmt.Println("❌ If specifying custom dimensions, both --width (-W) and --height (-H) must be provided.")
+			fmt.Println(errorColor("❌ If specifying custom dimensions, both --width (-W) and --height (-H) must be provided."))
 			return
 		}
 
 		img, format, err := loadImage(imagePathOrURL)
 		if err != nil {
-			fmt.Printf("❌ Error loading image: %v\n", err)
+			fmt.Printf("%s %v\n", errorColor("❌ Error loading image:"), err)
 			return
 		}
 
-		fmt.Println()
+		if strings.HasPrefix(imagePathOrURL, "http://") || strings.HasPrefix(imagePathOrURL, "https://") {
+			fmt.Println()
+		}
 
-		fmt.Printf("✅ Image loaded! Format: %s, Size: %dx%d\n",
-			format, img.Bounds().Dx(), img.Bounds().Dy())
+		fmt.Printf("✅ %s Format: %s, Size: %dx%d\n",
+			successColor("Image loaded!"),
+			infoColor(format),
+			img.Bounds().Dx(),
+			img.Bounds().Dy())
 
 		renderer := configureRenderer(useFullBlocks, useBraille, noDither, renderWidth, renderHeight)
 
