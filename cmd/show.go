@@ -3,11 +3,16 @@ package cmd
 import (
 	"fmt"
 	"image"
+	_ "image/gif"  // Support GIF format
 	_ "image/jpeg" // Support JPEG format
 	_ "image/png"  // Support PNG format
+	"io"
+	"net/http"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
+	_ "golang.org/x/image/webp" // Support WebP format
 )
 
 // Command-line flags for 'show'.
@@ -20,12 +25,11 @@ var (
 )
 
 var showCmd = &cobra.Command{
-	Use:   "show [image_path]",
-	Short: "Render an image in the terminal",
+	Use:   "show [image_path_or_url]",
+	Short: "Render an image from a local path or URL in the terminal",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		imagePath := args[0]
-		fmt.Printf("📸 Loading image: %s\n", imagePath)
+		imagePathOrURL := args[0]
 
 		// Check if one dimension is set but not the other
 		if (renderWidth > 0 && renderHeight == 0) || (renderHeight > 0 && renderWidth == 0) {
@@ -33,16 +37,35 @@ var showCmd = &cobra.Command{
 			return
 		}
 
-		file, err := os.Open(imagePath)
-		if err != nil {
-			fmt.Printf("❌ Couldn't open image: %v\n", err)
-			return
-		}
-		defer file.Close()
+		var reader io.ReadCloser
 
-		img, format, err := image.Decode(file)
-		if err != nil {
-			fmt.Printf("❌ Couldn't decode image (is it a valid PNG/JPEG?): %v\n", err)
+		if strings.HasPrefix(imagePathOrURL, "http://") || strings.HasPrefix(imagePathOrURL, "https://") {
+			fmt.Printf("📸 Downloading image from URL: %s\n", imagePathOrURL)
+			resp, httpErr := http.Get(imagePathOrURL)
+			if httpErr != nil {
+				fmt.Printf("❌ Couldn't download image: %v\n", httpErr)
+				return
+			}
+			if resp.StatusCode != http.StatusOK {
+				fmt.Printf("❌ Couldn't download image: received status code %d\n", resp.StatusCode)
+				resp.Body.Close()
+				return
+			}
+			reader = resp.Body
+		} else {
+			fmt.Printf("📸 Loading image from path: %s\n", imagePathOrURL)
+			file, fileErr := os.Open(imagePathOrURL)
+			if fileErr != nil {
+				fmt.Printf("❌ Couldn't open image: %v\n", fileErr)
+				return
+			}
+			reader = file
+		}
+		defer reader.Close()
+
+		img, format, decodeErr := image.Decode(reader)
+		if decodeErr != nil {
+			fmt.Printf("❌ Couldn't decode image: %v\n", decodeErr)
 			return
 		}
 
@@ -62,6 +85,7 @@ var showCmd = &cobra.Command{
 		renderer.UseDither = !noColor
 
 		// Override dimensions if flags are set
+		// The check above ensures that if one is > 0, both are.
 		if renderWidth > 0 {
 			renderer.MaxWidth = renderWidth
 		}
