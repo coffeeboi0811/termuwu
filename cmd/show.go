@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	_ "golang.org/x/image/webp"
 )
@@ -28,7 +29,8 @@ func loadImage(pathOrURL string) (image.Image, string, error) {
 
 	if strings.HasPrefix(pathOrURL, "http://") || strings.HasPrefix(pathOrURL, "https://") {
 		fmt.Printf("📸 Downloading image from URL: %s\n", pathOrURL)
-		resp, httpErr := http.Get(pathOrURL)
+		req, _ := http.NewRequest("GET", pathOrURL, nil)
+		resp, httpErr := http.DefaultClient.Do(req)
 		if httpErr != nil {
 			return nil, "", fmt.Errorf("couldn't download image: %w", httpErr)
 		}
@@ -36,7 +38,21 @@ func loadImage(pathOrURL string) (image.Image, string, error) {
 			resp.Body.Close()
 			return nil, "", fmt.Errorf("couldn't download image: received status code %d", resp.StatusCode)
 		}
-		reader = resp.Body
+
+		bar := progressbar.NewOptions64(
+			resp.ContentLength,
+			progressbar.OptionSetDescription("Downloading..."),
+			progressbar.OptionSetWidth(15),
+			progressbar.OptionShowBytes(true),
+			progressbar.OptionSetTheme(progressbar.Theme{
+				Saucer:        "=",
+				SaucerHead:    ">",
+				SaucerPadding: " ",
+				BarStart:      "[",
+				BarEnd:        "]",
+			}),
+		)
+		reader = io.NopCloser(io.TeeReader(resp.Body, bar))
 	} else {
 		fmt.Printf("📸 Loading image from path: %s\n", pathOrURL)
 		file, fileErr := os.Open(pathOrURL)
@@ -91,6 +107,8 @@ var showCmd = &cobra.Command{
 			fmt.Printf("❌ Error loading image: %v\n", err)
 			return
 		}
+
+		fmt.Println()
 
 		fmt.Printf("✅ Image loaded! Format: %s, Size: %dx%d\n",
 			format, img.Bounds().Dx(), img.Bounds().Dy())
