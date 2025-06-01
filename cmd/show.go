@@ -3,23 +3,27 @@ package cmd
 import (
 	"fmt"
 	"image"
-	_ "image/jpeg"
-	_ "image/png" // importing them blank to register the image formats
+	_ "image/jpeg" // Register JPEG decoder
+	_ "image/png"  // Register PNG decoder
 	"os"
 
-	"github.com/nfnt/resize"
 	"github.com/spf13/cobra"
 )
 
+// Flags for the show command
+var (
+	useFullBlocks bool // -full: render with full blocks
+	useBraille    bool // -braille: render with braille patterns
+	noColor       bool // -no-dither: disable dithering (was noColor, but dithering is the color aspect here)
+)
+
 var showCmd = &cobra.Command{
-	Use:   "show",
+	Use:   "show [image_path]",
 	Short: "Render an image in the terminal",
+	Args:  cobra.ExactArgs(1), // Expect exactly one argument: the image path
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 1 {
-			fmt.Println("❌ Please provide an image file path.")
-			return
-		}
 		imagePath := args[0]
+		// Basic user feedback, could be enhanced with a verbose flag later.
 		fmt.Printf("📸 Loading image: %s\n", imagePath)
 
 		file, err := os.Open(imagePath)
@@ -29,9 +33,9 @@ var showCmd = &cobra.Command{
 		}
 		defer file.Close()
 
-		// decoding the image
 		img, format, err := image.Decode(file)
 		if err != nil {
+			// This can happen if the file isn't a supported image format or is corrupted.
 			fmt.Printf("❌ Failed to decode image: %v\n", err)
 			return
 		}
@@ -39,24 +43,30 @@ var showCmd = &cobra.Command{
 		fmt.Printf("✅ Image loaded successfully! Format: %s, Size: %dx%d\n",
 			format, img.Bounds().Dx(), img.Bounds().Dy())
 
-		// resizing the image to fit the terminal
-		maxWidth := uint(80)
-		resizedImg := resize.Resize(maxWidth, 0, img, resize.Lanczos3) // 0 for height means to maintain aspect ratio. Lanczos3 gives the best quality, especially when scaling down for terminal display.
-
-		for y := 0; y < resizedImg.Bounds().Dy(); y++ {
-			for x := 0; x < resizedImg.Bounds().Dx(); x++ {
-				r, g, b, _ := resizedImg.At(x, y).RGBA()
-				ansi := RGBToANSI256(r, g, b)
-
-				// Print block with background color
-				fmt.Printf("\x1b[48;5;%dm ", ansi)
-			}
-			fmt.Print("\x1b[0m\n") // Reset color, then newline
+		// Determine the rendering mode based on command-line flags.
+		// Default to HalfBlockMode for a good balance of quality and performance.
+		mode := HalfBlockMode
+		if useFullBlocks {
+			mode = BlockMode
+		} else if useBraille {
+			mode = BrailleMode
 		}
 
+		renderer := NewImageRenderer(mode)
+		// Allow disabling dithering, which can sometimes be useful for specific images or terminals.
+		renderer.UseDither = !noColor // Renamed flag from noColor to noDither for clarity
+
+		output := renderer.RenderImage(img)
+		fmt.Print(output)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(showCmd)
+
+	// Define flags for the show command.
+	showCmd.Flags().BoolVar(&useFullBlocks, "full", false, "Render using full character blocks (lower vertical resolution).")
+	showCmd.Flags().BoolVar(&useBraille, "braille", false, "Render using Unicode Braille patterns (experimental, high detail).")
+	// Changed flag name from "no-color" to "no-dither" as dithering is what's being controlled.
+	showCmd.Flags().BoolVar(&noColor, "no-dither", false, "Disable dithering to reduce color noise (can lead to banding).")
 }
