@@ -9,17 +9,17 @@ import (
 	"golang.org/x/term"
 )
 
-// RGBToANSI256 figures out the best ANSI 256 color for a given RGB value.
+// RGBToANSI256 tries to find the best ANSI 256 color for a given RGB.
 func RGBToANSI256(r, g, b uint32) int {
 	r8 := clamp8(r >> 8)
 	g8 := clamp8(g >> 8)
 	b8 := clamp8(b >> 8)
 
 	if r8 == 0 && g8 == 0 && b8 == 0 {
-		return 16 // Standard ANSI Black.
+		return 16 // ANSI Black.
 	}
 
-	// Give very dark colors a little nudge so they don't just become black.
+	// Nudge very dark colors up a bit so they don't just become black.
 	if r8 < 15 && g8 < 15 && b8 < 15 {
 		r8 = clamp8(uint32(r8) + 10)
 		g8 = clamp8(uint32(g8) + 10)
@@ -36,7 +36,7 @@ func RGBToANSI256(r, g, b uint32) int {
 
 	cubeColor := 16 + (36 * rLevel) + (6 * gLevel) + bLevel
 
-	// If it's almost gray, the grayscale ramp might actually look better.
+	// For near-grays, the dedicated grayscale ramp can sometimes be a better fit.
 	if isNearGrayscale(r8, g8, b8) {
 		grayColor := mapToGrayscale(r8, g8, b8)
 		if colorDistance(r8, g8, b8, grayColor) < colorDistance(r8, g8, b8, cubeColor) {
@@ -47,7 +47,6 @@ func RGBToANSI256(r, g, b uint32) int {
 	return cubeColor
 }
 
-// clamp8 makes sure a value is within the 0-255 range.
 func clamp8(val uint32) uint8 {
 	if val > 255 {
 		return 255
@@ -55,9 +54,9 @@ func clamp8(val uint32) uint8 {
 	return uint8(val)
 }
 
-// quantizeToSix converts an 8-bit color value to one of the 6 levels in the ANSI color cube.
+// quantizeToSix maps an 8-bit color to one of 6 ANSI cube levels.
 func quantizeToSix(val uint8) int {
-	if val < 48 { // Thresholds for 6 levels (0..5)
+	if val < 48 { // Thresholds for 6 levels (0..5).
 		return 0
 	}
 	if val < 95 {
@@ -75,35 +74,32 @@ func quantizeToSix(val uint8) int {
 	return 5
 }
 
-// isGrayscale checks if a color is basically gray.
 func isGrayscale(r, g, b uint8) bool {
 	max := maxUint8(r, g, b)
 	min := minUint8(r, g, b)
-	return max-min <= 10 // How close R, G, and B need to be to count as gray.
+	return max-min <= 10 // Tolerance for what's "gray enough".
 }
 
-// isNearGrayscale is for colors that aren't strictly gray but might be better represented by the grayscale ramp.
 func isNearGrayscale(r, g, b uint8) bool {
 	max := maxUint8(r, g, b)
 	min := minUint8(r, g, b)
-	return max-min <= 30 // A bit more lenient than isGrayscale.
+	return max-min <= 30 // A bit more forgiving for "almost gray".
 }
 
-// mapToGrayscale finds the best match in ANSI's 24-step grayscale ramp.
+// mapToGrayscale finds the closest match in ANSI's 24-step grayscale ramp.
 func mapToGrayscale(r, g, b uint8) int {
-	gray := uint8(0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)) // Standard luminance calculation.
+	gray := uint8(0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)) // Standard luminance.
 
 	if gray < 10 {
-		return 232 // Use the darkest available gray from the ramp, not pure black.
+		return 232 // Darkest non-black gray in the ramp.
 	}
 	if gray > 245 {
 		return 255 // Lightest gray.
 	}
-	// Spread the rest across the grayscale ramp.
 	return 232 + int(float64(gray-8)*(23.0/240.0))
 }
 
-// colorDistance tries to measure how different two colors look to a human.
+// colorDistance estimates perceptual difference between colors.
 func colorDistance(r1, g1, b1 uint8, colorIndex int) float64 {
 	r2, g2, b2 := ansiToRGB(colorIndex)
 
@@ -111,14 +107,13 @@ func colorDistance(r1, g1, b1 uint8, colorIndex int) float64 {
 	dg := float64(g1) - float64(g2)
 	db := float64(b1) - float64(b2)
 
-	// Using weighted Euclidean distance because greens look brighter, blues darker.
+	// Weighted to roughly match human perception (greens pop more, etc.).
 	return 2*dr*dr + 4*dg*dg + 3*db*db
 }
 
-// ansiToRGB gives an approximate RGB value for an ANSI 256 color index.
-// Needed for colorDistance.
+// ansiToRGB converts an ANSI index back to an approximate RGB. Useful for colorDistance.
 func ansiToRGB(index int) (uint8, uint8, uint8) {
-	if index >= 232 && index <= 255 { // Grayscale colors.
+	if index >= 232 && index <= 255 { // Grays.
 		grayVal := float64(index-232)*(240.0/23.0) + 8.0
 		if grayVal < 0 {
 			grayVal = 0
@@ -126,29 +121,26 @@ func ansiToRGB(index int) (uint8, uint8, uint8) {
 		if grayVal > 255 {
 			grayVal = 255
 		}
-		gray := uint8(grayVal)
-		return gray, gray, gray
+		return uint8(grayVal), uint8(grayVal), uint8(grayVal)
 	}
 
-	if index >= 16 && index <= 231 { // The 6x6x6 color cube.
+	if index >= 16 && index <= 231 { // 6x6x6 color cube.
 		index -= 16
 		r := (index / 36) % 6
 		g := (index / 6) % 6
 		b := index % 6
-		// These are the typical RGB values for each level in the color cube.
-		valMap := []uint8{0, 47, 95, 142, 189, 236}
+		valMap := []uint8{0, 47, 95, 142, 189, 236} // RGB values for cube levels.
 		return valMap[r], valMap[g], valMap[b]
 	}
 
-	// Standard 0-15 colors. These can vary a lot between terminals.
+	// Standard 0-15 colors are tricky as they vary by terminal.
 	if index == 0 || index == 16 {
 		return 0, 0, 0
 	} // Black
 	if index == 7 || index == 231 {
 		return 255, 255, 255
 	} // White
-	// For other standard colors, mid-gray is a rough guess for distance checks.
-	return 128, 128, 128
+	return 128, 128, 128 // Default to mid-gray for others.
 }
 
 func maxUint8(a, b, c uint8) uint8 {
@@ -171,41 +163,41 @@ func minUint8(a, b, c uint8) uint8 {
 	return c
 }
 
-// RenderMode tells us how to draw the image pixels.
+// RenderMode defines how to draw pixels.
 type RenderMode int
 
 const (
-	BlockMode     RenderMode = iota // Uses full character blocks (a space with a background color).
-	HalfBlockMode                   // Uses Unicode half blocks '▀' to get more vertical detail.
-	BrailleMode                     // Uses Unicode Braille characters for a higher-res monochrome look.
+	BlockMode     RenderMode = iota // Full character blocks.
+	HalfBlockMode                   // Unicode half blocks for better vertical detail.
+	BrailleMode                     // Unicode Braille for hi-res mono.
 )
 
-// ImageRenderer is responsible for drawing the image in the terminal.
+// ImageRenderer draws images in the terminal.
 type ImageRenderer struct {
 	Mode        RenderMode
-	MaxWidth    int     // How many characters wide the image can be.
-	MaxHeight   int     // How many lines tall the image can be.
-	UseDither   bool    // Whether to use dithering to smooth out colors.
-	AspectRatio float64 // The height/width ratio of a character in the terminal.
+	MaxWidth    int     // Terminal width in characters.
+	MaxHeight   int     // Terminal height in lines.
+	UseDither   bool    // Apply dithering?
+	AspectRatio float64 // Character height/width (usually around 0.5).
 }
 
-// NewImageRenderer sets up an ImageRenderer, trying to get the current terminal size.
+// NewImageRenderer prepares an ImageRenderer, checking terminal size.
 func NewImageRenderer(mode RenderMode) *ImageRenderer {
 	width, height, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
-		width, height = 100, 28 // A sensible default if we can't get the terminal size.
+		width, height = 100, 28 // Fallback if terminal size detection fails.
 	}
 
 	return &ImageRenderer{
 		Mode:        mode,
-		MaxWidth:    width - 2,  // Leave a small margin.
-		MaxHeight:   height - 3, // Leave a bit more margin at the bottom.
+		MaxWidth:    width - 2,  // Small margin.
+		MaxHeight:   height - 3, // A bit more margin at the bottom for the prompt.
 		UseDither:   true,
-		AspectRatio: 0.5, // Most terminal fonts are about twice as tall as they are wide.
+		AspectRatio: 0.5, // Common for terminal fonts.
 	}
 }
 
-// RenderImage takes an image and turns it into a string of ANSI escape codes for terminal display.
+// RenderImage converts an image to an ANSI string.
 func (r *ImageRenderer) RenderImage(img image.Image) string {
 	bounds := img.Bounds()
 	imgWidth := bounds.Dx()
@@ -214,7 +206,7 @@ func (r *ImageRenderer) RenderImage(img image.Image) string {
 	var outputWidth, outputHeight int
 
 	if r.Mode == HalfBlockMode {
-		// Half blocks give us two "pixels" vertically per character row.
+		// Half blocks double our effective vertical resolution.
 		maxEffectiveHeight := r.MaxHeight * 2
 
 		scaleX := float64(r.MaxWidth) / float64(imgWidth)
@@ -227,15 +219,15 @@ func (r *ImageRenderer) RenderImage(img image.Image) string {
 		outputWidth = int(float64(imgWidth) * scale)
 		outputHeight = int(float64(imgHeight) * scale)
 		if outputHeight%2 != 0 {
-			outputHeight-- // Needs to be even for half blocks.
-		}
+			outputHeight--
+		} // Must be even for half block pairs.
 		if outputHeight <= 0 {
 			outputHeight = 2
 		}
 
 	} else { // BlockMode or BrailleMode.
 		scaleX := float64(r.MaxWidth) / float64(imgWidth)
-		// Character aspect ratio is important for BlockMode's perceived image shape.
+		// AspectRatio is key for BlockMode to not look squished/stretched.
 		scaleY := (float64(r.MaxHeight) * r.AspectRatio) / float64(imgHeight)
 		scale := scaleX
 		if scaleY < scaleX {
@@ -262,7 +254,7 @@ func (r *ImageRenderer) RenderImage(img image.Image) string {
 	}
 }
 
-// renderFullBlocksImproved draws the image using a space character with a colored background for each pixel.
+// renderFullBlocksImproved uses a space with background color for each "pixel".
 func (r *ImageRenderer) renderFullBlocksImproved(img image.Image, width, height int) string {
 	bounds := img.Bounds()
 	var result strings.Builder
@@ -283,20 +275,19 @@ func (r *ImageRenderer) renderFullBlocksImproved(img image.Image, width, height 
 	return result.String()
 }
 
-// renderHalfBlocksImproved uses Unicode '▀' to draw two "pixels" (top and bottom half) per character cell.
+// renderHalfBlocksImproved uses Unicode '▀' for two "pixels" (top/bottom) per char cell.
 func (r *ImageRenderer) renderHalfBlocksImproved(img image.Image, width, height int) string {
 	bounds := img.Bounds()
 	var result strings.Builder
 
-	for y := 0; y < height; y += 2 { // Step by 2 because each loop handles two image rows.
+	for y := 0; y < height; y += 2 { // Two image rows per terminal line.
 		for x := 0; x < width; x++ {
 			topColor := r.sampleArea(img, bounds, x, y, width, height)
 			var bottomColor Color
 			if y+1 < height {
 				bottomColor = r.sampleArea(img, bounds, x, y+1, width, height)
 			} else {
-				// If there's no bottom row (odd image height), just use the top color.
-				bottomColor = topColor
+				bottomColor = topColor // Odd height, duplicate last row's pixel.
 			}
 
 			topR, topG, topB := topColor.R, topColor.G, topColor.B
@@ -311,10 +302,9 @@ func (r *ImageRenderer) renderHalfBlocksImproved(img image.Image, width, height 
 			bottomANSI := RGBToANSI256(uint32(bottomR)<<8, uint32(bottomG)<<8, uint32(bottomB)<<8)
 
 			if topANSI == bottomANSI {
-				// If both halves are the same, just draw a full block.
 				result.WriteString(fmt.Sprintf("\033[48;5;%dm \033[0m", topANSI))
 			} else {
-				// Otherwise, use the half block char with different fg/bg colors.
+				// '▀' (Upper Half Block) with fg for top, bg for bottom.
 				result.WriteString(fmt.Sprintf("\033[38;5;%dm\033[48;5;%dm▀\033[0m", topANSI, bottomANSI))
 			}
 		}
@@ -323,14 +313,13 @@ func (r *ImageRenderer) renderHalfBlocksImproved(img image.Image, width, height 
 	return result.String()
 }
 
-// renderBraille uses Unicode Braille characters. Each char is a 2x4 grid of dots.
-// This gives a higher spatial resolution but is monochrome for each dot.
+// renderBraille uses Unicode Braille (2x4 dot grid per char) for hi-res monochrome.
 func (r *ImageRenderer) renderBraille(img image.Image, width, height int) string {
 	bounds := img.Bounds()
 	var result strings.Builder
 
-	brailleWidth := (width + 1) / 2   // Braille chars are 2 output pixels wide.
-	brailleHeight := (height + 3) / 4 // And 4 output pixels tall.
+	brailleWidth := (width + 1) / 2
+	brailleHeight := (height + 3) / 4
 	if brailleWidth <= 0 {
 		brailleWidth = 1
 	}
@@ -340,21 +329,21 @@ func (r *ImageRenderer) renderBraille(img image.Image, width, height int) string
 
 	for by := 0; by < brailleHeight; by++ {
 		for bx := 0; bx < brailleWidth; bx++ {
-			var pattern uint8                  // This will hold the bitmask for the Braille character.
-			var avgR, avgG, avgB, count uint32 // For the average color of the 2x4 region.
+			var pattern uint8                  // Bitmask for the Braille dots.
+			var avgR, avgG, avgB, count uint32 // For average color of the 2x4 region.
 
-			// Go through the 2x4 dots for this Braille character.
-			for py := 0; py < 4; py++ { // Dot row in Braille char (0-3)
-				for px := 0; px < 2; px++ { // Dot column (0-1)
+			// Sample the 2x4 dot region.
+			for py := 0; py < 4; py++ { // Dot row in char.
+				for px := 0; px < 2; px++ { // Dot col in char.
 					imgSampleX := bx*2 + px
 					imgSampleY := by*4 + py
 
 					if imgSampleX < width && imgSampleY < height {
 						color := r.sampleArea(img, bounds, imgSampleX, imgSampleY, width, height)
 
-						// Turn dot on/off based on luminance.
+						// Dot 'on' if luminance is over a threshold.
 						lum := 0.299*float64(color.R) + 0.587*float64(color.G) + 0.114*float64(color.B)
-						if lum > 128 { // Arbitrary threshold for "on".
+						if lum > 128 { // 128 is a common mid-point threshold.
 							pattern |= brailleDotMask(px, py)
 						}
 
@@ -367,14 +356,14 @@ func (r *ImageRenderer) renderBraille(img image.Image, width, height int) string
 			}
 
 			var finalR8, finalG8, finalB8 uint8
-			if count > 0 { // Calculate the average color for the Braille char's foreground.
+			if count > 0 { // Average color for the Braille char's foreground.
 				finalR8 = uint8(avgR / count)
 				finalG8 = uint8(avgG / count)
 				finalB8 = uint8(avgB / count)
 			}
 
 			ansiColor := RGBToANSI256(uint32(finalR8)<<8, uint32(finalG8)<<8, uint32(finalB8)<<8)
-			brailleChar := 0x2800 + rune(pattern) // Braille chars start at U+2800.
+			brailleChar := 0x2800 + rune(pattern) // Braille Unicode block starts at U+2800.
 
 			result.WriteString(fmt.Sprintf("\033[38;5;%dm%c\033[0m", ansiColor, brailleChar))
 		}
@@ -383,8 +372,8 @@ func (r *ImageRenderer) renderBraille(img image.Image, width, height int) string
 	return result.String()
 }
 
-// brailleDotMask gives the bit for a dot at (x,y) in a Braille char.
-// The dot numbering is a bit specific for Braille.
+// brailleDotMask provides the bit for a dot at (x,y) in a Braille char.
+// The dot numbering is specific to how Braille patterns are encoded.
 func brailleDotMask(x, y int) uint8 {
 	// Braille dot pattern:
 	// 1 (0x01) 4 (0x08)
@@ -401,7 +390,7 @@ func brailleDotMask(x, y int) uint8 {
 	return 0
 }
 
-// applyDither is an older Bayer matrix dithering method. Kept for reference.
+// applyDither: Old Bayer matrix dithering. Kept for reference.
 func (r *ImageRenderer) applyDither(r32, g32, b32 uint32, x, y int) (uint32, uint32, uint32) {
 	bayerMatrix := [4][4]float64{
 		{0.0625, 0.5625, 0.1875, 0.6875},
@@ -425,13 +414,12 @@ func (r *ImageRenderer) applyDither(r32, g32, b32 uint32, x, y int) (uint32, uin
 	return r32, g32, b32
 }
 
-// Color is just a simple struct for 8-bit RGB.
 type Color struct {
 	R, G, B uint8
 }
 
-// sampleArea gets a color from the original image for a given "pixel" in our scaled output.
-// This version just picks the color from the center of the corresponding area (nearest neighbor).
+// sampleArea grabs a color from the source image for a target output "pixel".
+// Uses nearest-neighbor sampling (center of the target area).
 func (r *ImageRenderer) sampleArea(img image.Image, bounds image.Rectangle, x, y, outWidth, outHeight int) Color {
 	srcX := float64(x) * float64(bounds.Dx()) / float64(outWidth)
 	srcY := float64(y) * float64(bounds.Dy()) / float64(outHeight)
@@ -458,28 +446,28 @@ func (r *ImageRenderer) sampleArea(img image.Image, bounds image.Rectangle, x, y
 	return Color{R: uint8(r32 >> 8), G: uint8(g32 >> 8), B: uint8(b32 >> 8)}
 }
 
-// enhanceContrast can be used to tweak the image contrast.
-// It's a no-op by default right now.
+// enhanceContrast: Can be used for contrast tweaks. Currently a no-op.
 func (r *ImageRenderer) enhanceContrast(val uint8) uint8 {
 	return val // No contrast enhancement applied by default.
 }
 
-// applySubtleDither adds a tiny bit of noise to colors to help with banding.
+// applySubtleDither adds a tiny bit of noise to reduce color banding.
 func (r *ImageRenderer) applySubtleDither(r8, g8, b8 uint8, x, y int) (uint8, uint8, uint8) {
 	if !r.UseDither {
 		return r8, g8, b8
 	}
-	// A very small dither matrix.
+	// Small, simple dither matrix.
 	matrix := [2][2]int8{
 		{-2, 0},
 		{1, -1},
 	}
-	threshold := matrix[y%2][x%2] * 2 // Tiny adjustment.
+	threshold := matrix[y%2][x%2] * 2 // Max adjustment of +/- 4.
 
 	return clampAddSigned(r8, threshold), clampAddSigned(g8, threshold), clampAddSigned(b8, threshold)
 }
 
-// clampAddSigned adds a (potentially negative) int8 to a uint8, keeping it in the 0-255 range.
+// clampAddSigned adds a signed value to a uint8, clamping to 0-255.
+// Uses int16 internally to avoid overflow/underflow during the add.
 func clampAddSigned(base uint8, add int8) uint8 {
 	result := int16(base) + int16(add)
 	if result > 255 {
@@ -491,14 +479,14 @@ func clampAddSigned(base uint8, add int8) uint8 {
 	return uint8(result)
 }
 
-// RenderImageToTerminal is a quick way to just print an image to the console.
+// RenderImageToTerminal is a helper to quickly print an image.
 func RenderImageToTerminal(img image.Image, mode RenderMode) {
 	renderer := NewImageRenderer(mode)
 	output := renderer.RenderImage(img)
 	fmt.Print(output)
 }
 
-// RenderImagePixelPerfect is a good starting point for rendering an image with decent quality.
+// RenderImagePixelPerfect aims for good quality with sensible defaults.
 func RenderImagePixelPerfect(img image.Image, useHalfBlocks bool) string {
 	mode := BlockMode
 	if useHalfBlocks {
@@ -509,7 +497,7 @@ func RenderImagePixelPerfect(img image.Image, useHalfBlocks bool) string {
 	return renderer.RenderImage(img)
 }
 
-// RenderImageAdvanced gives you all the knobs to turn for rendering.
+// RenderImageAdvanced offers more control over rendering.
 func RenderImageAdvanced(img image.Image, mode RenderMode, maxWidth, maxHeight int, useDither bool) string {
 	renderer := &ImageRenderer{
 		Mode:        mode,
