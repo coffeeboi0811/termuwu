@@ -1,7 +1,15 @@
 # 🎨 termuwu - Image Rendering in Your Terminal!
 
 🖼️ TermUwU is a simple and flexible CLI tool for rendering images directly in your terminal.
-It supports both local files and URLs, and displays them using detailed, colorful ANSI output — no GUI required
+It supports both local files and URLs, and displays them using detailed, colorful ANSI output - no GUI required
+
+<p align="center">
+  <img src="./example1.png" alt="Example 1" style="width:100%;" />
+</p>
+
+<p align="center">
+  <img src="./example2.png" alt="Example 2" style="width:100%;" />
+</p>
 
 ## 🌟 Features
 
