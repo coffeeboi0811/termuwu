@@ -16,8 +16,33 @@ It supports both local files and URLs, and displays them using detailed, colorfu
 
 ## 🚀 Installation
 
-```bash
+You can install **termuwu** in a couple of ways depending on your vibe 😼
 
+### 🔹 Option 1: Go Install (recommended)
+
+If you have Go (1.18+) installed, you can install termuwu globally with:
+
+```bash
+go install github.com/coffeeboi0811/termuwu@latest
+```
+
+Make sure your Go bin directory is in your `PATH`, usually:
+
+```bash
+export PATH="$HOME/go/bin:$PATH"
+```
+
+After that, you can run `termuwu` from anywhere in your terminal.
+
+### 🔹 Option 2: Build from Source
+
+Clone the repo and build it yourself:
+
+```bash
+git clone https://github.com/coffeeboi0811/termuwu.git
+cd termuwu
+go build -o termuwu
+./termuwu show ./your-image.jpg
 ```
 
 ## 💡 Usage Examples
