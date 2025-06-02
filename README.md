@@ -4,11 +4,8 @@
 It supports both local files and URLs, and displays them using detailed, colorful ANSI output - no GUI required
 
 <p align="center">
-  <img src="./example1.png" alt="Example 1" style="width:100%;" />
-</p>
-
-<p align="center">
-  <img src="./example2.png" alt="Example 2" style="width:100%;" />
+  <img src="./example1.png" alt="Example 1" height="250px" style="margin-right: 12px;" />
+  <img src="./example2.png" alt="Example 2" height="250px" />
 </p>
 
 ## 🌟 Features
