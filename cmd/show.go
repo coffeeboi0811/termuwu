@@ -32,7 +32,10 @@ func loadImage(pathOrURL string) (image.Image, string, error) {
 
 	if strings.HasPrefix(pathOrURL, "http://") || strings.HasPrefix(pathOrURL, "https://") {
 		fmt.Printf("📸 %s %s\n", cyan("Downloading image from URL:"), urlColor(pathOrURL))
-		req, _ := http.NewRequest("GET", pathOrURL, nil)
+		req, reqErr := http.NewRequest("GET", pathOrURL, nil)
+		if reqErr != nil {
+			return nil, "", fmt.Errorf("invalid URL: %w", reqErr)
+		}
 		resp, httpErr := http.DefaultClient.Do(req)
 		if httpErr != nil {
 			return nil, "", fmt.Errorf("couldn't download image: %w", httpErr)
