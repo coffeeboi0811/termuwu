@@ -224,29 +224,6 @@ func brailleDotMask(x, y int) uint8 {
 	return 0
 }
 
-func (r *ImageRenderer) applyDither(r32, g32, b32 uint32, x, y int) (uint32, uint32, uint32) {
-	bayerMatrix := [4][4]float64{
-		{0.0625, 0.5625, 0.1875, 0.6875},
-		{0.8125, 0.3125, 0.9375, 0.4375},
-		{0.2500, 0.7500, 0.1250, 0.6250},
-		{1.0000, 0.5000, 0.8750, 0.3750},
-	}
-	threshold := bayerMatrix[y%4][x%4] * 4096 // old bayer matrix dithering
-	r32 = uint32(float64(r32) + threshold)
-	g32 = uint32(float64(g32) + threshold)
-	b32 = uint32(float64(b32) + threshold)
-	if r32 > 65535 {
-		r32 = 65535
-	}
-	if g32 > 65535 {
-		g32 = 65535
-	}
-	if b32 > 65535 {
-		b32 = 65535
-	}
-	return r32, g32, b32
-}
-
 func (r *ImageRenderer) sampleArea(img image.Image, bounds image.Rectangle, x, y, outWidth, outHeight int) Color {
 	srcX := float64(x) * float64(bounds.Dx()) / float64(outWidth)
 	srcY := float64(y) * float64(bounds.Dy()) / float64(outHeight)
@@ -273,10 +250,6 @@ func (r *ImageRenderer) sampleArea(img image.Image, bounds image.Rectangle, x, y
 	return Color{R: uint8(r32 >> 8), G: uint8(g32 >> 8), B: uint8(b32 >> 8)}
 }
 
-func (r *ImageRenderer) enhanceContrast(val uint8) uint8 {
-	return val
-}
-
 func (r *ImageRenderer) applySubtleDither(r8, g8, b8 uint8, x, y int) (uint8, uint8, uint8) {
 	if !r.UseDither {
 		return r8, g8, b8
@@ -299,30 +272,4 @@ func clampAddSigned(base uint8, add int8) uint8 {
 		return 0
 	}
 	return uint8(result)
-}
-
-func RenderImageToTerminal(img image.Image, mode RenderMode) {
-	renderer := NewImageRenderer(mode)
-	output := renderer.RenderImage(img)
-	fmt.Print(output)
-}
-
-func RenderImagePixelPerfect(img image.Image, useHalfBlocks bool) string {
-	mode := BlockMode
-	if useHalfBlocks {
-		mode = HalfBlockMode
-	}
-	renderer := NewImageRenderer(mode)
-	return renderer.RenderImage(img)
-}
-
-func RenderImageAdvanced(img image.Image, mode RenderMode, maxWidth, maxHeight int, useDither bool) string {
-	renderer := &ImageRenderer{
-		Mode:        mode,
-		MaxWidth:    maxWidth,
-		MaxHeight:   maxHeight,
-		UseDither:   useDither,
-		AspectRatio: 0.5,
-	}
-	return renderer.RenderImage(img)
 }

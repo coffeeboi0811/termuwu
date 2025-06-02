@@ -5,7 +5,8 @@ It supports both local files and URLs, and displays them using detailed, colorfu
 
 <p align="center">
   <img src="./example1.png" alt="Example 1" height="250px" style="margin-right: 12px;" />
-  <img src="./example2.png" alt="Example 2" height="250px" />
+  <img src="./example2.png" alt="Example 2" height="250px" style="margin-right: 12px;"/>
+  <img src="./example3.png" alt="Example 1" height="250px" />
 </p>
 
 ## 🌟 Features
